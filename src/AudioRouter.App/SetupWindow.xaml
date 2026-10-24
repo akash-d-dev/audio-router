@@ -1,0 +1,85 @@
+<Window x:Class="AudioRouter.App.SetupWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Audio Router · Setup guide"
+        Width="680" Height="820" MinWidth="540" MinHeight="540" WindowStartupLocation="CenterOwner"
+        Background="#0C131B" Foreground="#EAF1F8" FontFamily="Segoe UI Variable, Segoe UI">
+  <Window.Resources>
+    <Style x:Key="StepTitle" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="16"/><Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Margin" Value="0,22,0,6"/>
+    </Style>
+    <Style x:Key="Point" TargetType="TextBlock">
+      <Setter Property="TextWrapping" Value="Wrap"/><Setter Property="Foreground" Value="{StaticResource MutedText}"/>
+      <Setter Property="Margin" Value="0,5,0,0"/><Setter Property="LineHeight" Value="19"/>
+    </Style>
+  </Window.Resources>
+  <Grid Margin="26">
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <StackPanel Margin="0,0,0,16">
+      <TextBlock Text="Set up any game or app" FontSize="23" FontWeight="SemiBold"/>
+      <TextBlock Text="Choose a source. Send the mix as a microphone." Foreground="{StaticResource MutedText}" Margin="0,6,0,0"/>
+    </StackPanel>
+    <ScrollViewer Grid.Row="1" x:Name="GuideScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+      <StackPanel Margin="0,0,14,0">
+        <TextBlock Text="1. Install VB-CABLE once" Style="{StaticResource StepTitle}" Margin="0,0,0,6"/>
+        <TextBlock Text="• Download VB-CABLE from its official website and extract the ZIP." Style="{StaticResource Point}"/>
+        <TextBlock Text="• Run VBCABLE_Setup_x64.exe as administrator. Restart Windows if requested." Style="{StaticResource Point}"/>
+        <Button Content="Get VB-CABLE ↗" Click="Download_Click" HorizontalAlignment="Left" Padding="12,7" Margin="0,10,0,0"/>
+
+        <TextBlock Text="2. Keep your usual Windows devices" Style="{StaticResource StepTitle}"/>
+        <TextBlock Text="• In Windows Settings → System → Sound, keep your speakers or headphones as Output and your usual microphone as Input." Style="{StaticResource Point}"/>
+        <TextBlock Text="• Check these after driver installation. The cable only needs to be selected in Audio Router and the destination app." Style="{StaticResource Point}"/>
+        <Button Content="Open Windows sound settings" Click="Sound_Click" HorizontalAlignment="Left" Padding="12,7" Margin="0,10,0,0"/>
+
+        <TextBlock Text="3. Start your mix in Audio Router" Style="{StaticResource StepTitle}"/>
+        <TextBlock Text="• Select the source application whose audio you want to share." Style="{StaticResource Point}"/>
+        <TextBlock Text="• Choose your physical or processed microphone, then CABLE Input as the routing output. Click Start routing." Style="{StaticResource Point}"/>
+        <TextBlock Text="• Keep the source app playing through your normal speakers. Audio Router copies its audio for the mix." Style="{StaticResource Point}"/>
+
+        <TextBlock Text="4. Set the destination app’s microphone" Style="{StaticResource StepTitle}"/>
+        <Border Background="#172D29" BorderBrush="#2A5B4F" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,6,0,8">
+          <StackPanel>
+            <TextBlock Text="Choose this input / microphone:" Foreground="#A3DBC9" FontSize="12"/>
+            <TextBlock x:Name="TargetInputName" Text="CABLE Output (VB-Audio Virtual Cable)" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,5,0,0"/>
+          </StackPanel>
+        </Border>
+        <TextBlock Text="Option A — inside the game or app" FontWeight="SemiBold" Margin="0,8,0,0"/>
+        <TextBlock Text="• Open that app’s Audio, Voice, or Microphone settings. Select the input shown above and save or apply." Style="{StaticResource Point}"/>
+        <TextBlock Text="Option B — Windows Volume mixer" FontWeight="SemiBold" Margin="0,14,0,0"/>
+        <TextBlock Text="• Open Settings → System → Sound → Volume mixer." Style="{StaticResource Point}"/>
+        <TextBlock Text="• Under Apps, expand the destination app. Where an Input device selector is available, choose the input shown above." Style="{StaticResource Point}"/>
+        <TextBlock Text="• Keep its Output device on your normal speakers or headphones." Style="{StaticResource Point}"/>
+        <Button x:Name="VolumeMixerButton" Content="Open Windows Volume mixer" Click="Mixer_Click" HorizontalAlignment="Left" Padding="12,7" Margin="0,10,0,0"/>
+        <TextBlock Text="If the app is missing, open it and start playback or voice chat. If it ignores Windows routing or has no input selector there, use its own microphone settings. Some apps need to restart to pick up a device change." Style="{StaticResource Point}" FontSize="12" Margin="0,12,0,0"/>
+
+        <TextBlock Text="5. Check the result" Style="{StaticResource StepTitle}"/>
+        <TextBlock Text="• Enable the destination app’s microphone or voice chat. Turn on Live meters to check the microphone, music, and combined-output levels." Style="{StaticResource Point}"/>
+        <TextBlock Text="• Use the destination app’s microphone test, or ask someone to confirm they hear both your voice and the selected audio." Style="{StaticResource Point}"/>
+        <TextBlock Text="• Use headphones to prevent your microphone picking up your speakers a second time. Leave Windows ‘Listen to this device’ off for the cable." Style="{StaticResource Point}"/>
+
+        <Expander Header="Volume, device changes, and stopping" Margin="0,22,0,0">
+          <StackPanel Margin="0,7,0,0">
+            <TextBlock Text="• Windows volume keys control what you hear. Music sent to others controls the outgoing copy from 0–200%. 200% is 2× signal gain (+6 dB). The source app’s own playback controls can still affect the copy." Style="{StaticResource Point}"/>
+            <TextBlock Text="• Change either device while routing is live; the route briefly restarts and keeps your application, levels, and mute/pause state." Style="{StaticResource Point}"/>
+            <TextBlock Text="• Turn off Share application audio to pause music while your microphone continues." Style="{StaticResource Point}"/>
+            <TextBlock Text="• Close (×) hides Audio Router to the tray and keeps the mix working. Click the tray icon or launch the app again to restore the existing instance." Style="{StaticResource Point}"/>
+            <TextBlock Text="• Stop routing stops the mix. Right-click the tray icon → Exit Audio Router to stop and quit. Choose your real microphone in the destination app to talk without the router." Style="{StaticResource Point}"/>
+            <TextBlock Text="• Click Refresh after opening an application or connecting a device. There is no automatic list refresh." Style="{StaticResource Point}"/>
+            <TextBlock Text="• Live meters is off by default and saved. Off hides bars and dB, stops peak measurements and UI meter updates, and leaves slider percentages visible. Metering also pauses in the tray, while minimized, or when routing stops." Style="{StaticResource Point}"/>
+            <TextBlock Text="• The separate CABLE In 16ch pair needs CABLE Out 16ch in the destination app. This guide shows the microphone matching your selected cable." Style="{StaticResource Point}"/>
+          </StackPanel>
+        </Expander>
+        <Expander Header="If there is silence or missing audio" Margin="0,14,0,0">
+          <StackPanel Margin="0,7,0,0">
+            <TextBlock Text="• Allow desktop microphone access in Windows Privacy settings if voice is missing." Style="{StaticResource Point}"/>
+            <TextBlock Text="• Start source playback if the music meter is silent. Protected audio and some unusual audio pipelines may not support capture." Style="{StaticResource Point}"/>
+            <TextBlock Text="• Browser selection includes all audible tabs and windows. Pause unrelated audio before sharing." Style="{StaticResource Point}"/>
+            <TextBlock Text="• The destination app can apply noise suppression or voice compression that changes music quality." Style="{StaticResource Point}"/>
+            <Button Content="Open microphone privacy settings" Click="Privacy_Click" HorizontalAlignment="Left" Padding="12,7" Margin="0,10,0,0"/>
+          </StackPanel>
+        </Expander>
+        <TextBlock Text="For apps that accept a selectable microphone. Audio stays on your PC; Audio Router does not save or upload it. Settings and error logs: %LOCALAPPDATA%\AudioRouter." Style="{StaticResource Point}" FontSize="11" Margin="0,22,0,12"/>
+      </StackPanel>
+    </ScrollViewer>
+    <Button Grid.Row="2" Content="Done" IsDefault="True" IsCancel="True" HorizontalAlignment="Right" Width="100" Margin="0,16,0,0" Padding="12,8"/>
+  </Grid>
+</Window>

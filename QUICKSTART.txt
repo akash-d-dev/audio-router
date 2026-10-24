@@ -1,0 +1,76 @@
+AUDIO ROUTER - WINDOWS 11 (22H2 OR LATER), 64-BIT
+
+Double-click AudioRouter.exe. No .NET installation is needed.
+The Setup guide button shows numbered steps and links to Windows settings.
+
+ONE-TIME SETUP
+1. Download VB-CABLE from https://vb-audio.com/Cable/
+   Extract the ZIP. Run VBCABLE_Setup_x64.exe as administrator.
+   Restart Windows if requested.
+2. Keep your normal speakers/headphones as Windows' output device and your
+   usual microphone as its input device. The driver installer may change these.
+3. In Audio Router, click Refresh. Choose your microphone and CABLE Input.
+4. In your destination game/app's Audio, Voice, or Microphone settings, choose
+   CABLE Output (VB-Audio Virtual Cable) as input, then save or apply.
+   Alternatively: Windows Settings > System > Sound > Volume mixer > Apps.
+   Expand the destination app and choose CABLE Output as Input device,
+   where that selector is available. Keep Output on your normal speakers.
+   If the app is missing, open it and start playback or voice chat.
+   If Windows routing is ignored or unavailable, use the app's own mic selector.
+   Some apps need to restart after a device change.
+5. Use the destination app's microphone test, or confirm with another listener
+   that both your voice and the selected application audio are present.
+
+EVERYDAY USE
+Select Brave, Spotify, or another running app. Click Start routing.
+Play audio in that application. Enable the destination app's microphone.
+Both the selected app and your voice reach its virtual microphone.
+
+- The app's audio keeps playing through your normal speakers/headphones.
+- Windows volume keys control what YOU hear. Music sent to others is separate.
+- Music sent to others and Your voice sliders control the transmitted mix.
+- Music sent to others supports 0-200%: 100% is the original captured level;
+  200% doubles the outgoing signal (+6 dB) without changing your listening level.
+- Microphone and cable dropdowns work while routing is live. Changing either
+  briefly restarts routing, keeping the app selection, levels, and mute/pause.
+  If the new device is unavailable, routing stops so you can choose another.
+- Use CABLE Input with CABLE Output in the destination app. The separate CABLE In 16ch
+  requires CABLE Out 16ch there; the app shows the matching device name.
+- Uncheck Share application audio to pause music; your microphone continues.
+- Closing the window with X hides it to the tray; voice and music keep working.
+  Click the tray icon or launch the executable again to restore the same instance.
+- Click Stop routing, or right-click the tray icon > Exit Audio Router,
+  to stop BOTH music and voice. Tray Exit also quits the app completely.
+  Change the destination app's input back to your real microphone to talk
+  without Audio Router, or reopen Audio Router and start routing again.
+- Browser selection includes all audible tabs and windows in that browser.
+- Source apps that close need to be selected again after reopening.
+- Click Refresh after opening an app or connecting a device. Lists do not
+  refresh automatically in the background.
+- Enable Live meters for bars and live dB numbers. Off by default; the setting
+  is saved. When off, peak measurement and UI meter updates stop. Metering
+  also pauses in the tray or while minimized; slider percentages stay visible.
+
+IF SOMETHING IS SILENT
+Enable Live meters to check microphone, music, and combined output.
+Allow desktop apps microphone access in Windows Privacy settings.
+Make sure the destination app uses the matching CABLE Output microphone.
+Protected audio and some applications may not support process capture.
+The source application's own playback volume can affect the captured copy.
+Receiving apps may compress music or suppress it as background noise.
+
+Use headphones to avoid your microphone picking up speaker audio twice.
+Leave Windows "Listen to this device" OFF for the cable.
+Do not set the cable as your default Windows speaker or microphone.
+
+PRIVACY AND REMOVAL
+Audio is processed locally in memory; it is not recorded or uploaded.
+Settings and error logs: %LOCALAPPDATA%\AudioRouter
+The app never changes Windows audio defaults, endpoint volume, per-app output
+assignments, or destination-app configuration.
+To remove the app, choose tray Exit, then delete this folder. Optionally delete settings.
+Remove VB-CABLE separately with its vendor installer if no longer needed.
+
+LICENSE
+Audio Router is MIT-licensed. See LICENSE and THIRD-PARTY-NOTICES.md.
+VB-CABLE is a separate product and is not included in this download.

@@ -1,0 +1,20 @@
+<Application x:Class="AudioRouter.App.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             ThemeMode="Dark" ShutdownMode="OnExplicitShutdown">
+  <Application.Resources>
+    <SolidColorBrush x:Key="MutedText" Color="#9CAEBF"/>
+    <Style TargetType="TextBlock"><Setter Property="Foreground" Value="#EAF1F8"/></Style>
+    <Style x:Key="Card" TargetType="Border">
+      <Setter Property="Background" Value="#141E29"/>
+      <Setter Property="BorderBrush" Value="#293847"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="14"/>
+      <Setter Property="Padding" Value="22"/>
+    </Style>
+    <Style x:Key="SectionLabel" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="11"/><Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Foreground" Value="#9CAEBF"/><Setter Property="Margin" Value="0,0,0,14"/>
+    </Style>
+  </Application.Resources>
+</Application>

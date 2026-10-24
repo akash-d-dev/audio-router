@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>AudioRouter</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets/AudioRouter.ico</ApplicationIcon>
+    <Version>1.1.0</Version>
+    <Product>Audio Router</Product>
+    <Description>Share one application's audio alongside your microphone.</Description>
+    <PublishTrimmed>false</PublishTrimmed>
+  </PropertyGroup>
+  <ItemGroup>
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+    <ProjectReference Include="../AudioRouter.Audio/AudioRouter.Audio.csproj" />
+    <Resource Include="Assets/AudioRouter.ico" />
+  </ItemGroup>
+</Project>

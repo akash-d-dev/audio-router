@@ -1,0 +1,35 @@
+name: Bug report
+description: Report a problem with Audio Router.
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Audio Router version
+      placeholder: 1.1.0
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version and build
+      description: Find these under Windows Settings > System > About.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include source app, destination app, selected microphone, and selected cable pair when relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: error
+    attributes:
+      label: Relevant error or screenshot
+      description: Remove personal paths and unrelated details. Audio recordings and full device inventories are usually unnecessary.
