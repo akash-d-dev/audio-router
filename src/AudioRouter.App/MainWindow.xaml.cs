@@ -18,18 +18,19 @@ public partial class MainWindow : Window
 {
     private readonly RoutingEngine router = new();
     private readonly Applications discovery = new();
-    private readonly ObservableCollection<ApplicationSource> applications = [];
+    private readonly ObservableCollection<ApplicationChoice> applications = [];
     private readonly DispatcherTimer meterTimer = new() { Interval = TimeSpan.FromMilliseconds(125) };
     private readonly TrayIcon tray;
     private readonly RouterSettings saved = SettingsStore.Load();
     private bool ready, busy, refreshing, refreshInFlight, closing, cleanupComplete, initialRefresh = true;
     private bool exitRequested, loaded;
     private int discoveryRefreshCount;
-    private string? preferredApplication;
+    private readonly HashSet<string> preferredApplications;
     private int noticeVersion;
     public string? SmokeTestOutput { get; set; }
     public bool RunDeviceSwitchSmokeTest { get; set; }
     private Task deviceSwitchTask = Task.CompletedTask;
+    private Task applicationSelectionTask = Task.CompletedTask;
 
     public MainWindow()
     {
@@ -38,7 +39,7 @@ public partial class MainWindow : Window
         CollectionViewSource.GetDefaultView(applications).Filter = MatchesSearch;
         MicrophoneSlider.Value = saved.MicrophoneGain * 100;
         MusicSlider.Value = saved.ApplicationGain * 100;
-        preferredApplication = saved.ApplicationPath;
+        preferredApplications = new(saved.Validated().ApplicationPaths!, StringComparer.OrdinalIgnoreCase);
         router.MicrophoneGain = saved.MicrophoneGain;
         router.ApplicationGain = saved.ApplicationGain;
         LiveMetersCheck.IsChecked = saved.ShowLiveMeters;
@@ -48,11 +49,16 @@ public partial class MainWindow : Window
             if (closing) return;
             noticeVersion++;
             SetStatus(notice.Message, notice.IsError);
-            if (notice.ApplicationStopped)
+            if (notice.RemovedApplicationPath is { } removedPath)
             {
+                bool previous = refreshing;
                 refreshing = true;
-                SourceList.SelectedItem = null;
-                refreshing = false;
+                var choice = applications.FirstOrDefault(app => SamePath(app.ExecutablePath, removedPath));
+                if (choice is not null) choice.IsSelected = false;
+                refreshing = previous;
+                RememberSelectedApplications();
+                SaveSettings();
+                UpdateApplicationCount();
             }
             UpdateControls();
         });
@@ -92,6 +98,7 @@ public partial class MainWindow : Window
                 MuteMicCheck.IsChecked = false;
                 if (!searchWorks || !gainWorks || !musicBoostWorks || !pauseWorks || !muteWorks) throw new InvalidOperationException("UI control smoke check failed.");
                 object lightweightChecks = await VerifyLightweightUiAsync();
+                object multipleSelectionChecks = await VerifyMultipleSelectionUiAsync();
                 object? deviceSwitchChecks = RunDeviceSwitchSmokeTest ? await VerifyDeviceSwitchingAsync() : null;
                 await Task.Delay(400);
                 UpdateLayout();
@@ -115,7 +122,7 @@ public partial class MainWindow : Window
                     CableGuidanceVisible = CableMissingPanel.Visibility == Visibility.Visible,
                     State = StateLabel.Text, Status = StatusText.Text,
                     SearchWorks = searchWorks, GainWorks = gainWorks, MusicBoostWorks = musicBoostWorks, PauseWorks = pauseWorks, MuteWorks = muteWorks,
-                    DeviceSwitchChecks = deviceSwitchChecks, LightweightChecks = lightweightChecks,
+                    DeviceSwitchChecks = deviceSwitchChecks, LightweightChecks = lightweightChecks, MultipleSelectionChecks = multipleSelectionChecks,
                     GuideShowsSelectedCable = guideShowsSelectedCable, VolumeMixerShortcutAvailable = volumeMixerShortcutAvailable
                 }, new JsonSerializerOptions { WriteIndented = true }));
                 var helpImage = new RenderTargetBitmap((int)setup.ActualWidth, (int)setup.ActualHeight, 96, 96, PixelFormats.Pbgra32);
@@ -139,10 +146,10 @@ public partial class MainWindow : Window
 
     private async Task RefreshAsync()
     {
-        if (refreshInFlight || closing) return;
+        if (refreshInFlight || closing || busy) return;
         discoveryRefreshCount++;
         refreshInFlight = true;
-        RefreshButton.IsEnabled = false;
+        UpdateControls();
         try
         {
             var appsTask = Task.Run(discovery.Discover);
@@ -167,25 +174,32 @@ public partial class MainWindow : Window
                 CableBox.ItemsSource = inventory.CableInputs;
                 CableBox.SelectedItem = Devices.PickCableInput(inventory.CableInputs, cableId);
             }
-            string? selectedPath = (SourceList.SelectedItem as ApplicationSource)?.ExecutablePath;
-            if (initialRefresh) selectedPath ??= preferredApplication;
             var found = appsTask.Result;
             for (int i = applications.Count - 1; i >= 0; i--)
-                if (!found.Any(a => SamePath(a.ExecutablePath, applications[i].ExecutablePath))) applications.RemoveAt(i);
+                if (!found.Any(a => SamePath(a.ExecutablePath, applications[i].ExecutablePath)))
+                {
+                    applications[i].PropertyChanged -= SourceChoice_Changed;
+                    applications.RemoveAt(i);
+                }
             foreach (var app in found.OrderBy(a => a.Name))
             {
                 var existing = applications.FirstOrDefault(a => SamePath(a.ExecutablePath, app.ExecutablePath));
-                if (existing is null) applications.Add(app);
-                else if (existing.HasAudio != app.HasAudio || !existing.Processes.SequenceEqual(app.Processes))
-                    applications[applications.IndexOf(existing)] = app;
+                if (existing is null)
+                {
+                    var choice = new ApplicationChoice(app, initialRefresh && preferredApplications.Contains(app.ExecutablePath));
+                    choice.PropertyChanged += SourceChoice_Changed;
+                    applications.Add(choice);
+                }
+                else existing.UpdateSource(app);
             }
-            if (selectedPath is not null) SourceList.SelectedItem = applications.FirstOrDefault(a => SamePath(a.ExecutablePath, selectedPath));
+            RememberSelectedApplications();
             UpdateApplicationCount();
+            if (router.IsRunning) await router.SelectApplicationsAsync(CheckedApplications());
             if (initialRefresh)
             {
                 if (inventory.CableInputs.Count == 0) SetStatus("Install VB-CABLE once, then refresh. Your current audio setup stays in place.");
                 else if (inventory.Microphones.Count == 0) SetStatus("Connect a microphone, then refresh.", true);
-                else SetStatus("Ready. Select an app and click Start routing. Your microphone also works without an app selected.");
+                else SetStatus("Ready. Check one or more apps and click Start routing. You can also route just your microphone.");
             }
             else if (previouslyMissingCable && inventory.CableInputs.Count > 0 && !router.IsRunning)
                 SetStatus("VB-CABLE is ready. Choose the matching cable output as your destination app’s microphone, then start routing.");
@@ -199,26 +213,51 @@ public partial class MainWindow : Window
         box.Items.Cast<AudioDevice>().SequenceEqual(devices);
     private static bool SamePath(string? first, string? second) => string.Equals(first, second, StringComparison.OrdinalIgnoreCase);
 
-    private async void Source_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private ApplicationSource[] CheckedApplications() => applications.Where(app => app.IsSelected).Select(app => app.Source).ToArray();
+
+    private void RememberSelectedApplications()
     {
-        if (!ready || refreshing || closing || e.AddedItems.Count == 0) return;
-        if (SourceList.SelectedItem is not ApplicationSource source) return;
-        preferredApplication = source.ExecutablePath;
+        preferredApplications.Clear();
+        preferredApplications.UnionWith(applications.Where(app => app.IsSelected).Select(app => app.ExecutablePath));
+    }
+
+    private async void SourceChoice_Changed(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(ApplicationChoice.IsSelected) || !ready || refreshing || closing || busy) return;
+        RememberSelectedApplications();
+        UpdateApplicationCount();
+        SaveSettings();
         if (!router.IsRunning) return;
+        applicationSelectionTask = ApplySelectedApplicationsAsync();
+        await applicationSelectionTask;
+    }
+
+    private async Task ApplySelectedApplicationsAsync()
+    {
         busy = true;
+        int previousNotice = noticeVersion;
         UpdateControls();
         try
         {
-            await router.SelectApplicationAsync(source);
-            SetStatus(router.SharingEnabled ? $"Sharing {source.Name} and your microphone." : $"{source.Name} selected. Music sharing is paused; your microphone continues.");
+            await router.SelectApplicationsAsync(CheckedApplications());
+            if (previousNotice == noticeVersion) SetStatus(RoutingSummary());
+            SaveSettings();
         }
         catch (Exception ex)
         {
             App.WriteError(ex);
-            refreshing = true; SourceList.SelectedItem = null; refreshing = false;
-            SetStatus("Your microphone continues. " + RoutingEngine.FriendlyError(ex), true);
+            SetStatus("Could not update app selection. " + RoutingEngine.FriendlyError(ex), true);
         }
         finally { busy = false; UpdateControls(); }
+    }
+
+    private string RoutingSummary()
+    {
+        var current = router.CurrentApplications;
+        if (current.Count == 0) return "Microphone routing is active. Check applications to add their audio.";
+        if (!router.SharingEnabled) return $"Application sharing is paused. {current.Count} apps selected; the microphone route stays active.";
+        string names = current.Count <= 2 ? string.Join(" + ", current.Select(app => app.Name)) : $"{current.Count} applications";
+        return $"Sharing {names} and your microphone.";
     }
 
     private async void Start_Click(object sender, RoutedEventArgs e) => await ToggleRoutingAsync();
@@ -239,10 +278,9 @@ public partial class MainWindow : Window
             else
             {
                 if (MicrophoneBox.SelectedItem is not AudioDevice mic || CableBox.SelectedItem is not AudioDevice cable) return;
-                var source = SourceList.SelectedItem as ApplicationSource;
-                await router.StartAsync(mic.Id, cable.Id, source);
+                await router.StartAsync(mic.Id, cable.Id, CheckedApplications());
                 if (previousNotice == noticeVersion)
-                    SetStatus(source is null ? "Microphone routing is active. Select an application to add its audio." : $"Sharing {source.Name} and your microphone. Windows volume changes only what you hear.");
+                    SetStatus(RoutingSummary());
                 SaveSettings();
             }
         }
@@ -254,13 +292,13 @@ public partial class MainWindow : Window
     {
         if (!ready) return;
         bool active = router.IsRunning;
-        MicrophoneBox.IsEnabled = CableBox.IsEnabled = !busy && !closing;
+        MicrophoneBox.IsEnabled = CableBox.IsEnabled = !busy && !refreshInFlight && !closing;
         MicrophoneBox.ToolTip = "Choose your microphone. Changing it while live briefly restarts routing.";
         CableBox.ToolTip = "Choose the virtual cable. Changing it while live briefly restarts routing.";
         if (CableBox.SelectedItem is AudioDevice cable)
             TargetMicrophoneHint.Text = $"Set that app’s microphone / input to:\n{cable.RecordingEndpointName}";
-        SourceList.IsEnabled = !busy && !closing;
-        StartButton.IsEnabled = !busy && !refreshing && !closing && (active || (MicrophoneBox.SelectedItem is AudioDevice && CableBox.SelectedItem is AudioDevice));
+        SourceList.IsEnabled = !busy && !refreshInFlight && !closing;
+        StartButton.IsEnabled = !busy && !refreshInFlight && !refreshing && !closing && (active || (MicrophoneBox.SelectedItem is AudioDevice && CableBox.SelectedItem is AudioDevice));
         StartButton.Content = busy ? "Please wait…" : active ? "Stop routing" : "Start routing";
         StateLabel.Text = active ? "ROUTING LIVE" : "STOPPED";
         StateLabel.Foreground = Brush(active ? "#54E1BD" : "#A8B7C6");
@@ -310,8 +348,8 @@ public partial class MainWindow : Window
 
     private async Task SwitchDevicesAsync(AudioDevice microphone, AudioDevice cable)
     {
-        // Preserve the actual captured source even when search hides its list selection.
-        var source = router.CurrentApplication;
+        // Preserve every captured source even when search hides its checkbox.
+        var sources = router.CurrentApplications.ToArray();
         int previousNotice = noticeVersion;
         busy = true;
         SetStatus("Switching audio devices… routing will resume automatically.");
@@ -320,11 +358,9 @@ public partial class MainWindow : Window
         {
             await router.StopAsync();
             if (closing) return;
-            await router.StartAsync(microphone.Id, cable.Id, source);
+            await router.StartAsync(microphone.Id, cable.Id, sources);
             if (!closing && previousNotice == noticeVersion)
-                SetStatus(router.SharingEnabled && router.CurrentApplication is { } current
-                    ? $"Devices updated. Sharing {current.Name} and your microphone."
-                    : "Devices updated. Microphone routing resumed; application sharing remains paused or unselected.");
+                SetStatus("Devices updated. " + RoutingSummary());
             SaveSettings();
         }
         catch (Exception ex)
@@ -350,10 +386,20 @@ public partial class MainWindow : Window
         MusicSlider.Value = 200;
         MicrophoneBox.SelectedItem = microphones[0];
         CableBox.SelectedItem = Devices.PickCableInput(cables, null);
-        SourceList.SelectedItem = applications.FirstOrDefault();
+        foreach (var choice in applications.Where(app => !string.Equals(Path.GetFileName(app.ExecutablePath), "AudioRouter.exe", StringComparison.OrdinalIgnoreCase)).Take(2)) choice.IsSelected = true;
         await ToggleRoutingAsync();
         if (!router.IsRunning || !MicrophoneBox.IsEnabled || !CableBox.IsEnabled)
             throw new InvalidOperationException("Device selectors are disabled while live.");
+        var chosen = applications.Where(app => app.IsSelected).Take(2).ToArray();
+        if (chosen.Length < 2 || router.CurrentApplications.Count < 2) throw new InvalidOperationException("Two checked apps were not captured.");
+        chosen[0].IsSelected = false;
+        await applicationSelectionTask;
+        bool removedOneWhileLive = router.IsRunning && router.CurrentApplications.All(app => !SamePath(app.ExecutablePath, chosen[0].ExecutablePath))
+            && router.CurrentApplications.Any(app => SamePath(app.ExecutablePath, chosen[1].ExecutablePath));
+        chosen[0].IsSelected = true;
+        await applicationSelectionTask;
+        bool addedOneWhileLive = router.IsRunning && chosen.All(choice => router.CurrentApplications.Any(app => SamePath(app.ExecutablePath, choice.ExecutablePath)));
+        if (!removedOneWhileLive || !addedOneWhileLive) throw new InvalidOperationException("Changing checkboxes interrupted another live source.");
         var routeBeforeHide = router.CurrentDevices;
         LiveMetersCheck.IsChecked = true;
         if (!meterTimer.IsEnabled || !router.MeteringEnabled) throw new InvalidOperationException("Enabled live meters did not start.");
@@ -372,7 +418,7 @@ public partial class MainWindow : Window
         CableBox.IsDropDownOpen = false;
         if (!microphoneDropdownOpened || !cableDropdownOpened)
             throw new InvalidOperationException("Device dropdowns cannot open while live.");
-        var originalSource = router.CurrentApplication?.ExecutablePath;
+        var originalSources = router.CurrentApplications.Select(app => app.ExecutablePath).Order().ToArray();
         var otherCable = cables.First(x => x.Id != router.CurrentDevices!.CableId);
         CableBox.SelectedItem = otherCable;
         await deviceSwitchTask;
@@ -384,7 +430,7 @@ public partial class MainWindow : Window
         bool microphoneSwitched = router.IsRunning && router.CurrentDevices?.MicrophoneId == otherMic.Id;
         bool statePreserved = !router.SharingEnabled && router.MicrophoneMuted
             && Math.Abs(router.MicrophoneGain - .7f) < .001 && Math.Abs(router.ApplicationGain - 2f) < .001
-            && router.CurrentApplication?.ExecutablePath == originalSource;
+            && router.CurrentApplications.Select(app => app.ExecutablePath).Order().SequenceEqual(originalSources);
         if (!cableSwitched || !microphoneSwitched || !statePreserved) throw new InvalidOperationException("Live device switching did not preserve routing state.");
 
         refreshing = true;
@@ -402,7 +448,8 @@ public partial class MainWindow : Window
         return new { CableSwitched = cableSwitched, MicrophoneSwitched = microphoneSwitched,
             StatePreserved = statePreserved, FailedSwitchStoppedSafely = failedSafely, Recovered = recovered,
             MicrophoneDropdownOpened = microphoneDropdownOpened, CableDropdownOpened = cableDropdownOpened,
-            SelectorsEnabledWhileLive = true, TrayKeptRouting = trayKeptRouting, ActiveBeforeExplicitExit = router.IsRunning };
+            SelectorsEnabledWhileLive = true, RemovedOneWhileLive = removedOneWhileLive, AddedOneWhileLive = addedOneWhileLive,
+            TrayKeptRouting = trayKeptRouting, ActiveBeforeExplicitExit = router.IsRunning };
     }
     private async void Refresh_Click(object sender, RoutedEventArgs e) => await RefreshAsync();
     private void Search_TextChanged(object sender, TextChangedEventArgs e)
@@ -411,13 +458,13 @@ public partial class MainWindow : Window
         CollectionViewSource.GetDefaultView(applications).Refresh();
         UpdateApplicationCount();
     }
-    private bool MatchesSearch(object item) => item is ApplicationSource source &&
+    private bool MatchesSearch(object item) => item is ApplicationChoice source &&
         (source.Name.Contains(SearchBox.Text, StringComparison.OrdinalIgnoreCase)
          || Path.GetFileName(source.ExecutablePath).Contains(SearchBox.Text, StringComparison.OrdinalIgnoreCase));
     private void UpdateApplicationCount()
     {
         int shown = applications.Count(a => MatchesSearch(a));
-        ApplicationCount.Text = $"{shown} applications · click Refresh to update";
+        ApplicationCount.Text = $"{shown} apps · {applications.Count(app => app.IsSelected)} checked · manual refresh";
         EmptyListLabel.Visibility = shown == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
     private void UpdateMeters()
@@ -481,6 +528,29 @@ public partial class MainWindow : Window
             IndicatorCentered = indicatorCentered };
     }
 
+    private async Task<object> VerifyMultipleSelectionUiAsync()
+    {
+        var choices = applications.Take(2).ToArray();
+        if (choices.Length < 2) throw new InvalidOperationException("The checkbox UI check needs two running applications.");
+        var previous = applications.Where(app => app.IsSelected).ToArray();
+        foreach (var app in applications) app.IsSelected = false;
+        foreach (var app in choices) app.IsSelected = true;
+        bool multipleChecked = CheckedApplications().Length == 2;
+        SearchBox.Text = "does-not-match-any-app";
+        bool searchPreservedSelection = CheckedApplications().Length == 2;
+        SearchBox.Text = "";
+        await RefreshAsync();
+        bool refreshPreservedSelection = choices.All(choice => applications.Any(app => SamePath(app.ExecutablePath, choice.ExecutablePath) && app.IsSelected));
+        choices[0].IsSelected = false;
+        bool independentUncheck = CheckedApplications().Length == 1 && choices[1].IsSelected;
+        foreach (var app in applications) app.IsSelected = false;
+        foreach (var app in previous) app.IsSelected = true;
+        if (!multipleChecked || !searchPreservedSelection || !refreshPreservedSelection || !independentUncheck)
+            throw new InvalidOperationException("Multiple application checkbox check failed.");
+        return new { MultipleChecked = multipleChecked, SearchPreservedSelection = searchPreservedSelection,
+            RefreshPreservedSelection = refreshPreservedSelection, IndependentUncheck = independentUncheck };
+    }
+
     public void RestoreFromTray()
     {
         if (closing) return;
@@ -517,7 +587,7 @@ public partial class MainWindow : Window
             {
                 MicrophoneId = (MicrophoneBox.SelectedItem as AudioDevice)?.Id ?? saved.MicrophoneId,
                 CableId = (CableBox.SelectedItem as AudioDevice)?.Id ?? saved.CableId,
-                ApplicationPath = preferredApplication, MicrophoneGain = (float)MicrophoneSlider.Value / 100,
+                ApplicationPaths = preferredApplications.ToArray(), MicrophoneGain = (float)MicrophoneSlider.Value / 100,
                 ApplicationGain = (float)MusicSlider.Value / 100, ShowLiveMeters = LiveMetersCheck.IsChecked == true
             });
         }

@@ -9,7 +9,8 @@ ONE-TIME SETUP
    Restart Windows if requested.
 2. Keep your normal speakers/headphones as Windows' output device and your
    usual microphone as its input device. The driver installer may change these.
-3. In Audio Router, click Refresh. Choose your microphone and CABLE Input.
+3. In Audio Router, click Refresh. Check one or more source apps, choose your
+   microphone and CABLE Input, then click Start routing.
 4. In your destination game/app's Audio, Voice, or Microphone settings, choose
    CABLE Output (VB-Audio Virtual Cable) as input, then save or apply.
    Alternatively: Windows Settings > System > Sound > Volume mixer > Apps.
@@ -22,9 +23,11 @@ ONE-TIME SETUP
    that both your voice and the selected application audio are present.
 
 EVERYDAY USE
-Select Brave, Spotify, or another running app. Click Start routing.
-Play audio in that application. Enable the destination app's microphone.
-Both the selected app and your voice reach its virtual microphone.
+Check Brave, Spotify, and/or other running apps. Click Start routing.
+Play audio in those apps and enable the destination app's microphone.
+All checked apps and your voice reach the same virtual microphone.
+Add or uncheck apps while live; other sources and your microphone continue.
+Music sent to others controls all checked apps together. Selections are saved.
 
 - The app's audio keeps playing through your normal speakers/headphones.
 - Windows volume keys control what YOU hear. Music sent to others is separate.
@@ -44,7 +47,8 @@ Both the selected app and your voice reach its virtual microphone.
   Change the destination app's input back to your real microphone to talk
   without Audio Router, or reopen Audio Router and start routing again.
 - Browser selection includes all audible tabs and windows in that browser.
-- Source apps that close need to be selected again after reopening.
+- A closed or failed source is unchecked independently; other apps and voice
+  continue. Refresh and check that app again after reopening.
 - Click Refresh after opening an app or connecting a device. Lists do not
   refresh automatically in the background.
 - Enable Live meters for bars and live dB numbers. Off by default; the setting

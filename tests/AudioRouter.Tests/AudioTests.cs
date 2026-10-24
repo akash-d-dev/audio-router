@@ -111,6 +111,59 @@ public sealed class AudioTests
     }
 
     [Fact]
+    public void RemovingOneApplicationPreservesOtherApplicationAndMicrophone()
+    {
+        var mixer = new AudioMixer { ApplicationGain = 1 };
+        var first = mixer.AddApplicationSource();
+        var second = mixer.AddApplicationSource();
+        Render(mixer);
+        mixer.WriteMicrophone(Signal(.1f));
+        mixer.WriteApplication(first, Signal(.2f));
+        mixer.WriteApplication(second, Signal(.3f));
+        Assert.All(Render(mixer), value => Assert.Equal(.6f, value, 5));
+        mixer.RemoveApplicationSource(first);
+        mixer.WriteApplication(first, Signal(.8f)); // an in-flight callback from the removed app
+        mixer.WriteMicrophone(Signal(.1f));
+        mixer.WriteApplication(second, Signal(.3f));
+        Assert.All(Render(mixer), value => Assert.Equal(.4f, value, 5));
+        mixer.RemoveApplicationSource(second);
+        mixer.WriteMicrophone(Signal(.1f));
+        Assert.All(Render(mixer), value => Assert.Equal(.1f, value, 5));
+    }
+
+    [Fact]
+    public void SelectionNormalizationMergesDuplicateAppsWithoutDuplicatingProcessCapture()
+    {
+        var normalized = ApplicationSelection.Normalize([
+            new("Browser", "C:\\Apps\\Browser.exe", [new(1, 100)], false),
+            new("Browser", "c:\\apps\\browser.exe", [new(1, 100), new(2, 200)], true),
+            new("Music", "C:\\Apps\\Music.exe", [new(3, 300)], true)]);
+        Assert.Equal(2, normalized.Length);
+        Assert.Equal(2, normalized[0].Processes.Count);
+        Assert.True(normalized[0].HasAudio);
+        Assert.Single(normalized[1].Processes);
+    }
+
+    [Fact]
+    public void MultipleSelectionsPersistAndLegacySingleSelectionMigrates()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"AudioRouter-multiple-{Guid.NewGuid():N}.json");
+        try
+        {
+            File.WriteAllText(path, "{\"ApplicationPath\":\"C:\\\\Apps\\\\Browser.exe\"}");
+            Assert.Equal(new[] { "C:\\Apps\\Browser.exe" }, SettingsStore.Load(path).ApplicationPaths);
+            SettingsStore.Save(new() { ApplicationPaths = [" C:\\Apps\\Browser.exe ", "c:\\apps\\browser.exe", "C:\\Apps\\Music.exe", ""] }, path);
+            var restored = SettingsStore.Load(path);
+            Assert.Equal(new[] { "C:\\Apps\\Browser.exe", "C:\\Apps\\Music.exe" }, restored.ApplicationPaths);
+            Assert.Equal("C:\\Apps\\Browser.exe", restored.ApplicationPath);
+            SettingsStore.Save(restored with { ApplicationPaths = [] }, path);
+            Assert.Empty(SettingsStore.Load(path).ApplicationPaths!);
+            Assert.Null(SettingsStore.Load(path).ApplicationPath);
+        }
+        finally { File.Delete(path); File.Delete(path + ".tmp"); }
+    }
+
+    [Fact]
     public void LimiterContainsClippingAndNonFiniteInput()
     {
         var mixer = new AudioMixer { MicrophoneGain = 2, ApplicationGain = 2 };
@@ -258,7 +311,7 @@ public sealed class AudioTests
         await Assert.ThrowsAnyAsync<Exception>(() => router.StartAsync("missing-device", "missing-cable", null));
         Assert.False(router.IsRunning);
         Assert.Null(router.CurrentDevices);
-        Assert.Null(router.CurrentApplication);
+        Assert.Empty(router.CurrentApplications);
         await router.StopAsync();
         await router.StopAsync();
     }

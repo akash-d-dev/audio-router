@@ -7,15 +7,24 @@ public sealed record RouterSettings
     public string? MicrophoneId { get; init; }
     public string? CableId { get; init; }
     public string? ApplicationPath { get; init; }
+    public string[]? ApplicationPaths { get; init; }
     public float MicrophoneGain { get; init; } = 1;
     public float ApplicationGain { get; init; } = .25f;
     public bool ShowLiveMeters { get; init; }
 
-    public RouterSettings Validated() => this with
+    public RouterSettings Validated()
     {
-        MicrophoneGain = float.IsFinite(MicrophoneGain) ? Math.Clamp(MicrophoneGain, 0, 2) : 1,
-        ApplicationGain = float.IsFinite(ApplicationGain) ? Math.Clamp(ApplicationGain, 0, 2) : .25f
-    };
+        var paths = (ApplicationPaths ?? (string.IsNullOrWhiteSpace(ApplicationPath) ? [] : [ApplicationPath]))
+            .Where(path => !string.IsNullOrWhiteSpace(path)).Select(path => path.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        return this with
+        {
+            // Keep the first path readable by older single-source releases.
+            ApplicationPath = paths.FirstOrDefault(), ApplicationPaths = paths,
+            MicrophoneGain = float.IsFinite(MicrophoneGain) ? Math.Clamp(MicrophoneGain, 0, 2) : 1,
+            ApplicationGain = float.IsFinite(ApplicationGain) ? Math.Clamp(ApplicationGain, 0, 2) : .25f
+        };
+    }
 }
 
 public static class SettingsStore

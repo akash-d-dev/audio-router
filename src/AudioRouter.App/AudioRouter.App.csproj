@@ -7,9 +7,9 @@
     <AssemblyName>AudioRouter</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets/AudioRouter.ico</ApplicationIcon>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <Product>Audio Router</Product>
-    <Description>Share one application's audio alongside your microphone.</Description>
+    <Description>Mix selected applications' audio alongside your microphone.</Description>
     <PublishTrimmed>false</PublishTrimmed>
   </PropertyGroup>
   <ItemGroup>

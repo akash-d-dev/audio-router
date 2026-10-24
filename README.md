@@ -2,11 +2,11 @@
 
 # Audio Router
 
-A Windows app that copies **one running application's audio**, mixes it with your microphone, and sends the mix to a game, voice chat, meeting, or other app through a virtual microphone. Your usual speaker output and Windows volume keys keep working.
+A Windows app that copies audio from **one or more running applications**, mixes it with your microphone, and sends the mix to a game, voice chat, meeting, or other app through a virtual microphone. Your usual speaker output and Windows volume keys keep working.
 
 ## Features
 
-- Pick one running application, including minimized/background audio apps.
+- Check multiple running applications, including minimized/background audio apps, and add/remove sources while live.
 - Mix its sound with a physical or processed microphone.
 - Control outgoing music from **0–200%**, independently of listening volume.
 - Pause application audio while voice continues, or mute the microphone separately.
@@ -26,15 +26,15 @@ Download `AudioRouter-win-x64.zip` from the repository's Releases page when a re
 Install [VB-CABLE](https://vb-audio.com/Cable/) once. The application's **Setup guide** and [QUICKSTART.txt](QUICKSTART.txt) walk through configuration. The driver needs administrator access and may require a restart. Audio Router itself runs without elevation.
 
 1. Keep your usual speakers/headphones as Windows' output and your real microphone as its input. Check these after driver installation because the vendor installer may change defaults.
-2. In Audio Router, choose an application, your microphone, and **CABLE Input**. Click **Start routing**.
+2. In Audio Router, check the applications you want to share, choose your microphone and **CABLE Input**, then click **Start routing**.
 3. In the destination game/app's Audio, Voice, or Microphone settings, choose **CABLE Output** as its input and keep the normal speaker output. Alternatively use **Windows Settings → System → Sound → Volume mixer → Apps → destination app → Input device**, where available. Some apps manage their own input devices; prefer their own selector when Windows routing is unavailable or ignored.
 4. Enable its microphone/voice chat and use a mic test or another listener to confirm both voice and music.
 
 The **Setup guide** and **How to set up any app** button show these steps in the app. See [the detailed setup guide](docs/SETUP.md) for per-app routing, matching cable pairs, and troubleshooting.
 
-The selected app continues playing normally. Its copied audio and your voice reach the destination app through VB-CABLE. The Windows master speaker volume controls only what you hear; the app's Music slider controls the transmitted copy. Source-app playback controls may still change that copy.
+Checked apps continue playing normally. Their copied audio and your voice reach the destination app through VB-CABLE. The Windows master speaker volume controls only what you hear; the Music slider controls all checked apps in the transmitted mix. Source-app playback controls may still change their captured copies.
 
-**Music sent to others** ranges from 0% to 200%. 100% uses the original captured level; 200% applies 2× gain (+6 dB) to the outgoing application audio, without changing your listening level or microphone gain. The existing output limiter contains peaks, so a source already near full scale has less room to boost. Boost settings are remembered across restarts and retained when switching devices.
+**Music sent to others** ranges from 0% to 200% and controls all checked apps together. 100% uses their captured levels; 200% applies 2× gain (+6 dB) to the combined application audio, without changing your listening level or microphone gain. The output limiter contains peaks, so already-loud sources have less room to boost. App selections and levels are remembered across restarts and retained when switching devices. Older single-app preferences are migrated automatically.
 
 **Pause music:** uncheck Share application audio; your microphone continues. **Close to tray:** the × button hides the window and keeps the current route working. Click the tray icon or choose **Open Audio Router** to restore it. Opening the executable again also restores the existing instance. **Stop everything:** click **Stop routing**, or choose **Exit Audio Router** from the tray menu to stop and quit. The destination app remains on the virtual microphone, so choose the real microphone there to talk without Audio Router. Routing never starts automatically on launch.
 
@@ -42,7 +42,7 @@ The app loads applications/devices once at launch. Click **Refresh** after openi
 
 Saved devices, gains, and source preferences from the former Voice Router name are read on first use. New settings are stored under `%LOCALAPPDATA%/AudioRouter` without overwriting an existing Audio Router profile.
 
-Browsers share all audible tabs/windows. Applications can be selected before they produce sound. If a source closes, voice continues and another app is never silently substituted. Reselect the source after reopening it. Headphones avoid acoustic echo. Leave Windows “Listen to this device” off for the cable.
+Browsers share all audible tabs/windows. Apps can be checked before they produce sound. Adding or unchecking one app leaves the mic and other captures active. A source that closes or fails is unchecked independently; other sources and voice continue, with no replacement silently selected. Refresh and check the source again after reopening it. Searching does not change checked selections. Headphones avoid acoustic echo. Leave Windows “Listen to this device” off for the cable.
 
 Microphone and output dropdowns remain usable while routing is live. Choosing another device briefly restarts the route with the same application, levels, and mute/pause state. If the new device cannot open, routing stops and the selectors remain usable for recovery. Fresh setup prefers the regular **CABLE Input** pair; a saved explicit choice is preserved. The separate **CABLE In 16ch** pair needs **CABLE Out 16ch** in the destination app. The setup guide follows the selected pair.
 
@@ -79,7 +79,7 @@ The UI supports `--smoke-test <absolute-output.png>`: it exercises search/gain/p
 
 ## Audio design
 
-- WASAPI process-loopback capture includes the selected application's child processes. Sources are discovered through visible windows and render-endpoint audio sessions, grouped by executable and application root, with PID creation-time checks. Capturing never expands to an Explorer/system-wide ancestor.
+- WASAPI process-loopback capture includes each checked application's child processes. Each application owns independent capture streams and mix buffers, so removal or failure does not restart healthy sources. Duplicate app/process selections are normalized. Sources are discovered through visible windows and render-endpoint audio sessions, grouped by executable and application root, with PID creation-time checks. Capturing never expands to an Explorer/system-wide ancestor.
 - Microphone and app capture request 48 kHz stereo float in shared mode. Windows handles microphone and output format conversion. Audio is mixed on the render clock, with 100 ms bounded input queues, a 60 ms backlog limit, silence on underflow, short gain ramps, and a soft output limiter.
 - Output goes only to a detected VB-CABLE render endpoint. Its recording endpoint cannot be selected as the microphone, preventing direct cable feedback. There is no speaker monitoring or system-loopback fallback.
 - The real-time callbacks do not use the UI thread. Device loss stops routing with a visible error. Application closure/capture failure removes application audio while preserving the mic. Stop and explicit tray Exit release every stream, including partially initialized sessions; hiding the window leaves the route intact.

@@ -1,6 +1,6 @@
 # Set up Audio Router for a game or app
 
-Audio Router sends one source application's audio, mixed with your microphone, to any destination app that accepts a selectable microphone. The in-app **Setup guide** contains the same steps, plus buttons to open Windows sound settings and Volume mixer.
+Audio Router mixes audio from one or more source apps with your microphone and sends it to a destination app that accepts a selectable microphone. The in-app **Setup guide** contains the same steps, plus buttons to open Windows sound settings and Volume mixer.
 
 ## 1. Install the virtual cable once
 
@@ -18,11 +18,12 @@ Audio Router sends one source application's audio, mixed with your microphone, t
 
 ## 3. Start the mix
 
-- Choose the source application in Audio Router.
+- Check one or more source applications in Audio Router, such as your browser and music player.
 - Choose your normal physical or processed microphone.
 - Choose **CABLE Input** under **Use in any game or app**, then click **Start routing**.
 - Play audio in the source app. Optionally enable **Live meters** to see microphone, application, and combined output.
 - Click **Refresh** after opening an app or connecting a device; discovery is manual after the initial load.
+- Add or uncheck apps while routing is live. The microphone and remaining sources continue. Checked selections survive search and refresh and are remembered for the next launch.
 
 ## 4. Select the virtual microphone in the destination app
 
@@ -60,6 +61,7 @@ The app prefers the regular pair for fresh setup and shows the matching micropho
 
 - Use the destination app's microphone test, or confirm with someone that they hear both voice and music.
 - Windows master volume controls what you hear. **Music sent to others** controls the outgoing copy from **0–200%**.
+- That slider controls all checked apps together. Uncheck a source to remove only its audio. An app that closes or fails is unchecked independently; other apps and the microphone keep working. Refresh and check it again after reopening.
 - 100% is the original captured level; 200% adds 2× signal gain (+6 dB). The output limiter contains peaks, so already-loud audio has less headroom. The source app's playback controls can still affect the captured copy.
 - Uncheck **Share application audio** to pause music while your microphone continues.
 - Change microphone or cable at any time; routing briefly restarts and retains your source, gains, and mute/pause state.

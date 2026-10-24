@@ -16,7 +16,7 @@
     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
     <StackPanel Margin="0,0,0,16">
       <TextBlock Text="Set up any game or app" FontSize="23" FontWeight="SemiBold"/>
-      <TextBlock Text="Choose a source. Send the mix as a microphone." Foreground="{StaticResource MutedText}" Margin="0,6,0,0"/>
+      <TextBlock Text="Check your sources. Send the mix as a microphone." Foreground="{StaticResource MutedText}" Margin="0,6,0,0"/>
     </StackPanel>
     <ScrollViewer Grid.Row="1" x:Name="GuideScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
       <StackPanel Margin="0,0,14,0">
@@ -31,9 +31,9 @@
         <Button Content="Open Windows sound settings" Click="Sound_Click" HorizontalAlignment="Left" Padding="12,7" Margin="0,10,0,0"/>
 
         <TextBlock Text="3. Start your mix in Audio Router" Style="{StaticResource StepTitle}"/>
-        <TextBlock Text="• Select the source application whose audio you want to share." Style="{StaticResource Point}"/>
+        <TextBlock Text="• Check one or more source apps, such as a browser and a music player. You can add or remove checked apps while routing is live." Style="{StaticResource Point}"/>
         <TextBlock Text="• Choose your physical or processed microphone, then CABLE Input as the routing output. Click Start routing." Style="{StaticResource Point}"/>
-        <TextBlock Text="• Keep the source app playing through your normal speakers. Audio Router copies its audio for the mix." Style="{StaticResource Point}"/>
+        <TextBlock Text="• Keep source apps playing through your normal speakers. Audio Router copies their audio into one mix. The Music sent to others slider controls all checked apps together." Style="{StaticResource Point}"/>
 
         <TextBlock Text="4. Set the destination app’s microphone" Style="{StaticResource StepTitle}"/>
         <Border Background="#172D29" BorderBrush="#2A5B4F" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,6,0,8">
@@ -61,6 +61,7 @@
             <TextBlock Text="• Windows volume keys control what you hear. Music sent to others controls the outgoing copy from 0–200%. 200% is 2× signal gain (+6 dB). The source app’s own playback controls can still affect the copy." Style="{StaticResource Point}"/>
             <TextBlock Text="• Change either device while routing is live; the route briefly restarts and keeps your application, levels, and mute/pause state." Style="{StaticResource Point}"/>
             <TextBlock Text="• Turn off Share application audio to pause music while your microphone continues." Style="{StaticResource Point}"/>
+            <TextBlock Text="• If one source closes or cannot be captured, only that app is unchecked. Your microphone and other checked sources keep working. Refresh and check the app again after reopening it." Style="{StaticResource Point}"/>
             <TextBlock Text="• Close (×) hides Audio Router to the tray and keeps the mix working. Click the tray icon or launch the app again to restore the existing instance." Style="{StaticResource Point}"/>
             <TextBlock Text="• Stop routing stops the mix. Right-click the tray icon → Exit Audio Router to stop and quit. Choose your real microphone in the destination app to talk without the router." Style="{StaticResource Point}"/>
             <TextBlock Text="• Click Refresh after opening an application or connecting a device. There is no automatic list refresh." Style="{StaticResource Point}"/>

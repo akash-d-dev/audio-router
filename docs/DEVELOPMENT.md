@@ -22,7 +22,7 @@ Regenerate the committed executable icon with `./tools/New-AppIcon.ps1` when cha
 ## Audio path
 
 - Discover visible application windows and audio sessions. Group processes by executable and application root; validate process creation times to guard against PID reuse.
-- Capture only the selected application's process trees using WASAPI process loopback. Never climb to Explorer or silently fall back to system-wide capture.
+- Capture each checked application's process trees using WASAPI process loopback. Keep a capture group per executable, normalize duplicate roots, and remove only that group's buffers/streams on uncheck, closure, or failure. Healthy captures and the microphone stay active. Never climb to Explorer or fall back to system-wide capture.
 - Request 48 kHz stereo float in shared mode. Windows handles microphone/output format adaptation. Render drives the mix; bounded 100 ms queues, a 60 ms backlog limit, silence on underflow, gain ramps, and a soft limiter keep it stable.
 - Render only to a detected VB-CABLE input endpoint. The cable's recording side is excluded from the microphone picker. No speaker monitoring path is added.
 - Capture/render callbacks do not use the UI thread. Device changes stop/restart the route with retained source and control state. Device failures stop the route; source-app closure keeps the microphone active without silently choosing another app.
@@ -35,12 +35,15 @@ These are manual tools, not CI prerequisites. Use the project-local dotnet path 
 ```powershell
 dotnet run --project tools/AudioRouter.Diagnostics -c Release -- --inventory
 dotnet run --project tools/AudioRouter.Diagnostics -c Release -- --verify-loopback
+dotnet run --project tools/AudioRouter.Diagnostics -c Release -- --verify-multiple-sources
 dotnet run --project tools/AudioRouter.Diagnostics -c Release -- --verify-volume
 dotnet run --project tools/AudioRouter.Diagnostics -c Release -- --probe-microphone
 dotnet run --project tools/AudioRouter.Diagnostics -c Release -- --probe-app 1234 3
 ```
 
 `--verify-loopback` launches two quiet test-tone processes and verifies that only the selected process is captured. `--verify-volume` additionally lowers/mutes the active speaker endpoint temporarily and restores its previous values in a `finally` block. Run it when a brief listening-volume change is acceptable. Probes report aggregate levels without saving audio; inventory can include local paths and device IDs, so keep its output local.
+
+`--verify-multiple-sources` launches two quiet independent app hosts, routes them through a real VB-CABLE pair with the microphone muted, and measures the cable recording endpoint. It checks both signals, duplicate normalization, independent removal, pause/resume of all app audio, source closure, and isolated capture failure. It needs a physical microphone and an installed cable; exit any normal router instance first. It does not change Windows volume or defaults and does not save audio.
 
 ## UI checks
 

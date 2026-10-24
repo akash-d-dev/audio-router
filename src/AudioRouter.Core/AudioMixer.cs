@@ -67,6 +67,15 @@ public sealed class AudioMixer : IWaveProvider
         }
     }
 
+    public void RemoveApplicationSource(PcmRingBuffer source)
+    {
+        lock (applicationGate)
+        {
+            source.Clear();
+            Volatile.Write(ref applicationBuffers, applicationBuffers.Where(buffer => !ReferenceEquals(buffer, source)).ToArray());
+        }
+    }
+
     public void WriteMicrophone(ReadOnlySpan<byte> data) => microphone.Write(MemoryMarshal.Cast<byte, float>(data));
 
     public void WriteApplication(PcmRingBuffer source, ReadOnlySpan<byte> data)

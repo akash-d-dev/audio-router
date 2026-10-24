@@ -4,31 +4,37 @@ using AudioRouter.Core;
 
 namespace AudioRouter.Audio;
 
-public sealed record RouterNotice(string Message, bool IsError = false, bool ApplicationStopped = false);
+public sealed record RouterNotice(string Message, bool IsError = false, string? RemovedApplicationPath = null);
 public sealed record RoutingDevices(string MicrophoneId, string CableId);
 
 /// <summary>Owns only private capture/render streams; never changes system device defaults or volume.</summary>
 public sealed class RoutingEngine : IAsyncDisposable
 {
     private readonly SemaphoreSlim gate = new(1);
-    private readonly List<WasapiRecorder> applicationRecorders = [];
+    private sealed class CaptureGroup(ApplicationSource source)
+    {
+        public ApplicationSource Source { get; } = source;
+        public List<WasapiRecorder> Recorders { get; } = [];
+        public List<PcmRingBuffer> Buffers { get; } = [];
+    }
+    private readonly Dictionary<string, CaptureGroup> applicationGroups = new(StringComparer.OrdinalIgnoreCase);
     private WasapiRecorder? microphone;
     private WasapiPlayer? player;
     private MMDevice? microphoneDevice, cableDevice;
     private CancellationTokenSource? monitorCancellation;
     private Task? monitorTask;
     private readonly List<Task> retiredMonitors = [];
-    private ApplicationSource? selected;
+    private ApplicationSource[] selected = [];
     private AudioMixer? mixer;
     private RoutingDevices? activeDevices;
     private bool running, stopping, disposed;
-    private int applicationGeneration, sessionGeneration;
+    private int sessionGeneration;
     private float micGain = 1, musicGain = .25f;
     private bool sharing = true, muted;
     private bool meteringEnabled = true;
 
     public bool IsRunning => Volatile.Read(ref running);
-    public ApplicationSource? CurrentApplication => Volatile.Read(ref selected);
+    public IReadOnlyList<ApplicationSource> CurrentApplications => Volatile.Read(ref selected);
     public RoutingDevices? CurrentDevices => Volatile.Read(ref activeDevices);
     public event EventHandler<RouterNotice>? Notice;
     public float MicrophoneGain { get => micGain; set { micGain = value; if (mixer is { } m) m.MicrophoneGain = value; } }
@@ -38,7 +44,7 @@ public sealed class RoutingEngine : IAsyncDisposable
     public bool MeteringEnabled { get => meteringEnabled; set { meteringEnabled = value; if (mixer is { } m) m.MeteringEnabled = value; } }
     public AudioLevels TakeLevels() => mixer?.TakeLevels() ?? default;
 
-    public Task StartAsync(string microphoneId, string cableId, ApplicationSource? source) => Task.Run(async () =>
+    public Task StartAsync(string microphoneId, string cableId, IReadOnlyList<ApplicationSource>? sources = null) => Task.Run(async () =>
     {
         await gate.WaitAsync().ConfigureAwait(false);
         try
@@ -77,11 +83,7 @@ public sealed class RoutingEngine : IAsyncDisposable
             microphone.StartRecording();
             player.Play();
             Volatile.Write(ref activeDevices, new(microphoneId, cableId));
-            if (source is not null)
-            {
-                try { await ChangeApplicationCoreAsync(source).ConfigureAwait(false); }
-                catch (Exception ex) { Notice?.Invoke(this, new($"Your microphone is running, but application capture failed: {FriendlyError(ex)}", true, true)); }
-            }
+            await ChangeApplicationsCoreAsync(sources ?? []).ConfigureAwait(false);
             monitorCancellation = new CancellationTokenSource();
             monitorTask = MonitorAsync(monitorCancellation.Token, session);
         }
@@ -94,55 +96,86 @@ public sealed class RoutingEngine : IAsyncDisposable
         finally { gate.Release(); }
     });
 
-    public Task SelectApplicationAsync(ApplicationSource? source) => Task.Run(async () =>
+    public Task SelectApplicationsAsync(IReadOnlyList<ApplicationSource> sources) => Task.Run(async () =>
     {
         await gate.WaitAsync().ConfigureAwait(false);
-        try { if (running) await ChangeApplicationCoreAsync(source).ConfigureAwait(false); }
+        try { if (running) await ChangeApplicationsCoreAsync(sources).ConfigureAwait(false); }
         finally { gate.Release(); }
     });
 
-    private async Task ChangeApplicationCoreAsync(ApplicationSource? source)
+    private void PublishApplications() => Volatile.Write(ref selected, applicationGroups.Values.Select(group => group.Source).ToArray());
+
+    private async Task ChangeApplicationsCoreAsync(IReadOnlyList<ApplicationSource> sources)
     {
-        await ClearApplicationCoreAsync().ConfigureAwait(false);
-        if (source is null || mixer is not { } mix) return;
-        int generation = applicationGeneration;
+        var requested = ApplicationSelection.Normalize(sources);
+        foreach (var group in applicationGroups.Values.ToArray())
+        {
+            var replacement = requested.FirstOrDefault(source => string.Equals(source.ExecutablePath, group.Source.ExecutablePath, StringComparison.OrdinalIgnoreCase));
+            if (replacement is not null && replacement.Processes.SequenceEqual(group.Source.Processes)) continue;
+            try { await RemoveApplicationCoreAsync(group).ConfigureAwait(false); }
+            catch (Exception ex) { Notice?.Invoke(this, new($"{group.Source.Name} stopped with a cleanup error. Other sources continue. {FriendlyError(ex)}", true)); }
+        }
+        foreach (var source in requested)
+        {
+            if (applicationGroups.ContainsKey(source.ExecutablePath)) continue;
+            try { await AddApplicationCoreAsync(source).ConfigureAwait(false); }
+            catch (Exception ex) { Notice?.Invoke(this, new($"Could not capture {source.Name}. Your microphone and other sources continue. {FriendlyError(ex)}", true, source.ExecutablePath)); }
+        }
+        PublishApplications();
+    }
+
+    private async Task AddApplicationCoreAsync(ApplicationSource source)
+    {
+        if (mixer is not { } mix) return;
+        var targets = source.Processes.Where(process => Applications.IsSameProcess(process, source.ExecutablePath)).ToArray();
+        if (targets.Length == 0) throw new InvalidOperationException("That application has closed. Refresh and check it again after reopening it.");
+        var group = new CaptureGroup(source);
+        applicationGroups.Add(source.ExecutablePath, group);
         try
         {
-            var targets = source.Processes.Where(p => Applications.IsSameProcess(p, source.ExecutablePath)).ToArray();
-            if (targets.Length == 0) throw new InvalidOperationException("That application has closed. Select it again after reopening it.");
             foreach (var target in targets)
             {
                 var recorder = await new WasapiRecorderBuilder().WithProcessLoopback((uint)target.Id)
                     .WithFormat(mix.WaveFormat).WithBufferLength(20).WithMmcssThreadPriority().BuildAsync().ConfigureAwait(false);
-                applicationRecorders.Add(recorder);
+                group.Recorders.Add(recorder);
                 var buffer = mix.AddApplicationSource();
+                group.Buffers.Add(buffer);
                 recorder.DataAvailable += (data, _, _, _) => mix.WriteApplication(buffer, data);
                 recorder.RecordingStopped += (_, args) =>
                 {
-                    if (args.Exception is { } error) QueueApplicationFailure(generation, error);
+                    if (args.Exception is { } error) QueueApplicationFailure(group, error);
                 };
                 recorder.StartRecording();
             }
-            selected = source;
+            PublishApplications();
         }
-        catch { await ClearApplicationCoreAsync().ConfigureAwait(false); throw; }
+        catch { await RemoveApplicationCoreAsync(group).ConfigureAwait(false); throw; }
     }
 
-    private async Task ClearApplicationCoreAsync()
+    private async Task RemoveApplicationCoreAsync(CaptureGroup group)
     {
-        applicationGeneration++;
-        selected = null;
-        var old = applicationRecorders.ToArray();
-        applicationRecorders.Clear();
-        // Remove the old mix before awaiting teardown: no old app audio can reach a new selection.
-        mixer?.RemoveApplicationSources();
+        if (!applicationGroups.TryGetValue(group.Source.ExecutablePath, out var current) || !ReferenceEquals(current, group)) return;
+        applicationGroups.Remove(group.Source.ExecutablePath);
+        foreach (var buffer in group.Buffers) mixer?.RemoveApplicationSource(buffer);
+        PublishApplications();
         var errors = new List<Exception>();
-        foreach (var recorder in old)
+        foreach (var recorder in group.Recorders)
         {
             try { await recorder.DisposeAsync().ConfigureAwait(false); }
             catch (Exception error) { errors.Add(error); }
         }
         if (errors.Count > 0) throw new AggregateException("An application stream could not be released cleanly.", errors);
+    }
+
+    private async Task ClearApplicationsCoreAsync()
+    {
+        var errors = new List<Exception>();
+        foreach (var group in applicationGroups.Values.ToArray())
+        {
+            try { await RemoveApplicationCoreAsync(group).ConfigureAwait(false); }
+            catch (Exception ex) { errors.Add(ex); }
+        }
+        if (errors.Count > 0) throw new AggregateException("Application streams reported cleanup errors.", errors);
     }
 
     private async Task MonitorAsync(CancellationToken token, int session)
@@ -155,10 +188,13 @@ public sealed class RoutingEngine : IAsyncDisposable
                 await gate.WaitAsync(token).ConfigureAwait(false);
                 try
                 {
-                    if (selected is { } source && !source.Processes.Any(p => Applications.IsSameProcess(p, source.ExecutablePath)))
+                    foreach (var group in applicationGroups.Values.ToArray())
                     {
-                        await ClearApplicationCoreAsync().ConfigureAwait(false);
-                        Notice?.Invoke(this, new("The selected application closed. Your microphone is still running. Select an application to share again.", ApplicationStopped: true));
+                        var source = group.Source;
+                        if (source.Processes.Any(process => Applications.IsSameProcess(process, source.ExecutablePath))) continue;
+                        try { await RemoveApplicationCoreAsync(group).ConfigureAwait(false); }
+                        catch (Exception ex) { Notice?.Invoke(this, new($"Cleanup error for {source.Name}: {FriendlyError(ex)}", true)); }
+                        Notice?.Invoke(this, new($"{source.Name} closed. Your microphone and other selected apps continue. Refresh and check it again after reopening it.", RemovedApplicationPath: source.ExecutablePath));
                     }
                 }
                 finally { gate.Release(); }
@@ -168,14 +204,15 @@ public sealed class RoutingEngine : IAsyncDisposable
         catch (Exception ex) { QueueFatal(session, "Audio monitoring failed", ex); }
     }
 
-    private void QueueApplicationFailure(int generation, Exception error) => _ = Task.Run(async () =>
+    private void QueueApplicationFailure(CaptureGroup group, Exception error) => _ = Task.Run(async () =>
     {
         await gate.WaitAsync().ConfigureAwait(false);
         try
         {
-            if (!running || generation != applicationGeneration) return;
-            await ClearApplicationCoreAsync().ConfigureAwait(false);
-            Notice?.Invoke(this, new($"Application capture stopped. Your microphone is still running. {FriendlyError(error)}", true, true));
+            if (!running || !applicationGroups.TryGetValue(group.Source.ExecutablePath, out var current) || !ReferenceEquals(current, group)) return;
+            try { await RemoveApplicationCoreAsync(group).ConfigureAwait(false); }
+            catch (Exception cleanup) { error = new AggregateException(error, cleanup); }
+            Notice?.Invoke(this, new($"{group.Source.Name} capture stopped. Your microphone and other apps continue. {FriendlyError(error)}", true, group.Source.ExecutablePath));
         }
         finally { gate.Release(); }
     });
@@ -222,7 +259,7 @@ public sealed class RoutingEngine : IAsyncDisposable
                 try { await release().ConfigureAwait(false); }
                 catch (Exception ex) { errors.Add(ex); }
             }
-            try { await ClearApplicationCoreAsync().ConfigureAwait(false); }
+            try { await ClearApplicationsCoreAsync().ConfigureAwait(false); }
             catch (Exception ex) { errors.Add(ex); }
             var oldPlayer = player;
             player = null;
